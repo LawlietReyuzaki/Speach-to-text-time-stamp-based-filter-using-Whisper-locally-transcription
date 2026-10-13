@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcription</title>
+<style>
+  :root { --bg:#f3f4f6; --card:#fff; --text:#111827; --muted:#6b7280; --accent:#2563eb; --rec:#dc2626; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --border:#e5e7eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:860px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0; }
+  h2 { font-size:15px; margin:0 0 10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .model { font-size:13px; color:var(--muted); background:#fff; border:1px solid var(--border); border-radius:999px; padding:4px 12px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:16px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:640px) { .grid { grid-template-columns:1fr; } }
+  label { font-size:13px; color:var(--muted); display:block; margin-bottom:4px; }
+  input[type=text], select { padding:9px 10px; border:1px solid var(--border); border-radius:8px; font:inherit; width:100%; background:#fff; }
+  button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  button.secondary { background:#eef0f3; color:var(--text); font-weight:500; }
+  button.rec { background:var(--rec); }
+  button.big { padding:12px 22px; font-size:16px; }
+  button:disabled { opacity:.45; cursor:default; }
+  #drop { border:2px dashed #c7cdd6; border-radius:10px; padding:26px; text-align:center; color:var(--muted); cursor:pointer; }
+  #drop.over { border-color:var(--accent); color:var(--accent); background:#eff6ff; }
+  .timer { font:600 28px/1 ui-monospace, Consolas, monospace; min-width:90px; }
+  .dot { width:12px; height:12px; border-radius:50%; background:var(--rec); display:inline-block; animation:blink 1s infinite; vertical-align:middle; margin-right:8px; }
+  @keyframes blink { 50% { opacity:.2; } }
+  .hint { font-size:13px; color:var(--muted); }
+  audio { width:100%; margin:10px 0; }
+  #wave { width:100%; height:90px; display:block; margin-top:10px; background:#0f172a; border-radius:8px; }
+  dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; margin:0 0 10px; font-size:14px; }
+  dt { color:var(--muted); }
+  dd { margin:0; }
+  .job { border-top:1px solid var(--border); padding:14px 0; }
+  .job:first-child { border-top:0; padding-top:0; }
+  .job header { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center; }
+  .name { font-weight:600; }
+  .meta { font-size:13px; color:var(--muted); }
+  .badge { font-size:12px; padding:2px 8px; border-radius:999px; background:#e5e7eb; }
+  .badge.done { background:#dcfce7; color:var(--ok); }
+  .badge.failed { background:#fee2e2; color:var(--bad); }
+  .badge.processing, .badge.queued { background:#fef3c7; color:var(--warn); }
+  .segments { margin:10px 0 0; padding:0; list-style:none; font-size:14px; }
+  .segments li { display:flex; gap:12px; padding:5px 8px; border-radius:6px; cursor:pointer; }
+  .segments li:hover { background:#eff6ff; }
+  .segments li.active { background:#dbeafe; }
+  .segments time { color:var(--accent); font-variant-numeric:tabular-nums; min-width:150px; text-decoration:underline dotted; }
+  .segments .hint { margin:0 0 4px; }
+  .text { margin-top:10px; padding:12px; background:#f9fafb; border-radius:8px; white-space:pre-wrap; font-size:16px; }
+  .error { color:var(--bad); font-size:14px; margin-top:6px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#111827; color:#fff; padding:10px 16px; border-radius:8px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast.show { opacity:1; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1>Speech to text</h1>
+    <div class="model" id="model">connecting...</div>
+  </div>
+
+  <section class="card">
+    <div class="grid">
+      <div>
+        <h2>1. Record</h2>
+        <label for="mic">Microphone</label>
+        <select id="mic"><option value="">Click to allow microphone access…</option></select>
+        <canvas id="wave" width="600" height="90"></canvas>
+        <div class="row" style="margin-top:8px">
+          <button id="recBtn" class="rec" disabled>● Start recording</button>
+          <span class="timer" id="timer">00:00</span>
+          <span id="recLive" class="hidden"><span class="dot"></span>recording</span>
+        </div>
+        <div class="hint" id="recHint">Pick a mic and speak: the wave should move. If it stays flat, choose another one.</div>
+      </div>
+      <div>
+        <h2>or upload a file</h2>
+        <div id="drop">Drop an audio file here or click to choose<br><span class="hint">mp3, wav, m4a, flac, ogg, webm · up to 200 MB</span></div>
+        <input id="file" type="file" accept=".wav,.mp3,.m4a,.flac,.ogg,.webm,audio/*" hidden>
+      </div>
+    </div>
+  </section>
+
+  <section class="card hidden" id="review">
+    <h2>2. Check and confirm</h2>
+    <audio id="player" controls></audio>
+    <dl>
+      <dt>File</dt><dd id="rvName"></dd>
+      <dt>Size</dt><dd id="rvSize"></dd>
+      <dt>Length</dt><dd id="rvDur"></dd>
+      <dt>Model</dt><dd id="rvModel"></dd>
+    </dl>
+    <div class="row">
+      <div style="flex:1 1 240px">
+        <label for="lang">Language</label>
+        <select id="lang"><option value="">Auto-detect</option></select>
+      </div>
+      <div style="flex:1 1 200px">
+        <label for="key">API key</label>
+        <input id="key" type="text" value="dev-key">
+      </div>
+    </div>
+    <div class="actions">
+      <button id="goBtn" class="big">Transcribe this audio</button>
+      <button id="saveBtn" class="secondary">Save audio to my PC</button>
+      <button id="discardBtn" class="secondary">Discard</button>
+    </div>
+    <div class="hint" style="margin-top:8px">Nothing is sent until you press Transcribe. The audio is then stored on the server under its job id and can be downloaded again from the result.</div>
+  </section>
+
+  <section class="card">
+    <h2>3. Results</h2>
+    <div id="jobs"><div class="meta">No transcriptions yet.</div></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const jobs = new Map();          // job_id -> {name, data}
+let pending = null;              // {file, url} waiting for confirmation
+let modelInfo = null;
+const key = () => $('#key').value.trim();
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// ---- auth: trade the API key for a JWT once, reuse it as a Bearer token
+let token = null, tokenKey = null;
+async function headers() {
+  if (!token || tokenKey !== key()) {
+    const res = await fetch('/v1/auth/token', { method: 'POST', headers: { 'X-API-Key': key() } });
+    if (!res.ok) throw new Error((await res.json()).error.message);
+    token = (await res.json()).access_token; tokenKey = key();
+  }
+  return { 'Authorization': `Bearer ${token}` };
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { ...(await headers()), ...(opts.headers || {}) } });
+  if (res.status === 401) token = null;
+  if (res.status === 204) return null;
+  const type = res.headers.get('content-type') || '';
+  const body = type.includes('json') ? await res.json() : (type.startsWith('text') ? await res.text() : await res.blob());
+  if (!res.ok) throw new Error(body?.error?.message || `${res.status} ${res.statusText}`);
+  return body;
+}
+
+// ---- step 1a: microphone picker, live waveform, recorder
+let recorder = null, chunks = [], tick = null, startedAt = 0;
+let monitor = null;              // {stream, ctx, analyser, raf} for the live waveform
+const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m));
+const micSel = $('#mic'), canvas = $('#wave'), ctx2d = canvas.getContext('2d');
+
+async function listMics() {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const mics = devices.filter(d => d.kind === 'audioinput');
+  const current = micSel.value;
+  micSel.innerHTML = '';
+  if (!mics.length || !mics[0].label) {
+    micSel.innerHTML = '<option value="">Click to allow microphone access…</option>';
+    return false;
+  }
+  mics.forEach((d, i) => {
+    const o = document.createElement('option');
+    o.value = d.deviceId; o.textContent = d.label || `Microphone ${i + 1}`;
+    micSel.appendChild(o);
+  });
+  if ([...micSel.options].some(o => o.value === current)) micSel.value = current;
+  return true;
+}
+
+async function openMic(deviceId) {
+  stopMonitor();
+  const constraints = { audio: deviceId ? { deviceId: { exact: deviceId } } : true };
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const analyser = ctx.createAnalyser(); analyser.fftSize = 2048;
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  monitor = { stream, ctx, analyser, raf: 0 };
+  drawWave();
+  $('#recBtn').disabled = false;
+  return stream;
+}
+
+function stopMonitor() {
+  if (!monitor) return;
+  cancelAnimationFrame(monitor.raf);
+  monitor.stream.getTracks().forEach(t => t.stop());
+  monitor.ctx.close();
+  monitor = null;
+  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawWave() {
+  const { analyser } = monitor;
+  const data = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(data);
+  const w = canvas.width, h = canvas.height;
+  ctx2d.fillStyle = '#0f172a'; ctx2d.fillRect(0, 0, w, h);
+  // peak level bar on the right, waveform across
+  let peak = 0;
+  for (const v of data) peak = Math.max(peak, Math.abs(v - 128) / 128);
+  ctx2d.strokeStyle = recorder && recorder.state === 'recording' ? '#f87171' : '#4ade80';
+  ctx2d.lineWidth = 2; ctx2d.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    const x = (i / data.length) * (w - 16), y = (data[i] / 255) * h;
+    i ? ctx2d.lineTo(x, y) : ctx2d.moveTo(x, y);
+  }
+  ctx2d.stroke();
+  ctx2d.fillStyle = peak > 0.9 ? '#f87171' : '#4ade80';
+  ctx2d.fillRect(w - 10, h - peak * h, 8, peak * h);
+  monitor.raf = requestAnimationFrame(drawWave);
+}
+
+async function ensureMic() {
+  try {
+    if (!(await listMics())) {            // no permission yet: ask, then list with labels
+      await openMic(null);
+      await listMics();
+      const live = monitor.stream.getAudioTracks()[0].getSettings().deviceId;
+      if (live) micSel.value = live;
+    } else if (!monitor) {
+      await openMic(micSel.value);
+    }
+  } catch (e) { toast(`Microphone blocked: ${e.message}`); }
+}
+
+micSel.addEventListener('mousedown', () => { if (!micSel.value) ensureMic(); });
+micSel.addEventListener('change', async () => {
+  if (recorder && recorder.state === 'recording') recorder.stop();
+  try { await openMic(micSel.value); } catch (e) { toast(`Cannot open that microphone: ${e.message}`); }
+});
+navigator.mediaDevices?.addEventListener?.('devicechange', listMics);
+
+$('#recBtn').onclick = async () => {
+  if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
+  if (!mime) { toast('This browser cannot record audio. Upload a file instead.'); return; }
+  if (!monitor) await ensureMic();
+  if (!monitor) return;
+  chunks = [];
+  recorder = new MediaRecorder(monitor.stream, { mimeType: mime });
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.onstop = () => {
+    clearInterval(tick);
+    $('#recBtn').textContent = '● Start recording'; $('#recLive').classList.add('hidden');
+    const ext = mime.includes('ogg') ? 'ogg' : 'webm';
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    review(new File(chunks, `recording-${stamp}.${ext}`, { type: mime }), (Date.now() - startedAt) / 1000);
+  };
+  recorder.start(250);
+  startedAt = Date.now();
+  tick = setInterval(() => { $('#timer').textContent = clock((Date.now() - startedAt) / 1000); }, 200);
+  $('#recBtn').textContent = '■ Stop'; $('#recLive').classList.remove('hidden');
+};
+
+// ---- step 1b: file picker
+const drop = $('#drop'), input = $('#file');
+drop.onclick = () => input.click();
+input.onchange = () => { if (input.files[0]) review(input.files[0]); input.value = ''; };
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) review(e.dataTransfer.files[0]); });
+
+// ---- step 2: review before anything is sent
+function review(file, knownDuration) {
+  if (pending) URL.revokeObjectURL(pending.url);
+  pending = { file, url: URL.createObjectURL(file) };
+  $('#player').src = pending.url;
+  $('#rvName').textContent = file.name;
+  $('#rvSize').textContent = human(file.size);
+  $('#rvDur').textContent = '…';
+  $('#rvModel').textContent = modelInfo ? `${modelInfo.name} on ${modelInfo.device} (${modelInfo.compute_type})` : 'unknown';
+  // Browser recordings (webm) carry no duration header, so use the timer value for those.
+  $('#player').onloadedmetadata = () => {
+    const d = $('#player').duration;
+    $('#rvDur').textContent = isFinite(d) ? clock(d) : (knownDuration ? clock(knownDuration) : 'unknown until processed');
+  };
+  $('#review').classList.remove('hidden');
+  $('#review').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+$('#discardBtn').onclick = () => { $('#review').classList.add('hidden'); if (pending) URL.revokeObjectURL(pending.url); pending = null; $('#timer').textContent = '00:00'; };
+
+$('#saveBtn').onclick = () => {
+  if (!pending) return;
+  const a = document.createElement('a'); a.href = pending.url; a.download = pending.file.name; a.click();
+};
+
+$('#goBtn').onclick = async () => {
+  if (!pending) return;
+  const form = new FormData();
+  form.append('file', pending.file);
+  if ($('#lang').value) form.append('language', $('#lang').value);
+  $('#goBtn').disabled = true;
+  try {
+    const r = await api('/v1/transcriptions', { method: 'POST', body: form });
+    // Placeholder until the first poll fetches the full record (dedup can return done at once).
+    jobs.set(r.job_id, { name: pending.file.name, data: { status: 'queued' } });
+    render(); poll(r.job_id);
+    $('#discardBtn').click();
+    toast(r.status === 'done' ? 'Identical audio was transcribed before, showing that result' : 'Uploaded, transcribing…');
+  } catch (e) { toast(`Upload failed: ${e.message}`); }
+  finally { $('#goBtn').disabled = false; }
+};
+
+// ---- step 3: results
+async function poll(id) {
+  try {
+    const data = await api(`/v1/transcriptions/${id}`);
+    const job = jobs.get(id); if (!job) return;
+    job.data = data; render();
+    if (data.status === 'queued' || data.status === 'processing') setTimeout(() => poll(id), 1000);
+  } catch (e) {
+    const job = jobs.get(id);
+    if (job) { job.data = { status: 'deleted', error: e.message }; render(); }
+  }
+}
+
+async function download(path, filename) {
+  try {
+    const body = await api(path);
+    const blob = body instanceof Blob ? body : new Blob([body], { type: 'text/plain' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { toast(e.message); }
+}
+
+async function remove(id) {
+  try { await api(`/v1/transcriptions/${id}`, { method: 'DELETE' }); jobs.delete(id); render(); toast('Deleted'); }
+  catch (e) { toast(e.message); }
+}
+
+async function retry(id) {
+  try { await api(`/v1/transcriptions/${id}/retry`, { method: 'POST' }); poll(id); }
+  catch (e) { toast(e.message); }
+}
+
+function render() {
+  const root = $('#jobs');
+  if (!jobs.size) { root.innerHTML = '<div class="meta">No transcriptions yet.</div>'; return; }
+  root.innerHTML = '';
+  [...jobs.entries()].reverse().forEach(([id, { name, data }]) => {
+    const el = document.createElement('article'); el.className = 'job';
+    const done = data.status === 'done';
+    const base = name.replace(/\.[^.]+$/, '');
+    const langName = done ? (LANG_NAMES[data.language] || data.language) : '';
+    el.innerHTML = `
+      <header>
+        <div><span class="name">${esc(name)}</span> <span class="badge ${data.status}">${data.status}</span></div>
+        <div class="meta">${done ? `${langName} · ${clock(data.duration)} · ` : ''}attempt ${data.attempts ?? 0}${data.result_of ? ' · reused earlier transcript' : ''}</div>
+      </header>
+      ${data.error ? `<div class="error">${esc(data.error)}</div>` : ''}
+      ${data.status === 'queued' || data.status === 'processing' ? '<div class="hint">Working… this page updates by itself.</div>' : ''}
+      ${done ? `<audio class="jobAudio" controls preload="metadata"></audio>
+               <div class="text">${esc(data.text) || '<i>no speech detected</i>'}</div>
+               ${data.segments.length ? '<div class="hint">Click a line to play the audio from that moment.</div>' : ''}
+               <ul class="segments">${data.segments.map((s, i) => `<li data-i="${i}" data-start="${s.start}" data-end="${s.end}"><time>${stamp(s.start)} – ${stamp(s.end)}</time><span>${esc(s.text)}</span></li>`).join('')}</ul>` : ''}
+      <div class="actions">
+        ${done ? ['txt', 'srt', 'vtt'].map(f => `<button class="secondary" data-dl="${f}">Download .${f}</button>`).join('') : ''}
+        ${data.status !== 'deleted' ? '<button class="secondary" data-audio>Download audio</button>' : ''}
+        ${data.status === 'failed' ? '<button data-retry>Retry</button>' : ''}
+        ${data.status !== 'deleted' ? '<button class="secondary" data-del>Delete</button>' : ''}
+      </div>`;
+    if (done) attachAudio(id, el);
+    el.querySelectorAll('[data-dl]').forEach(b => b.onclick = () => download(`/v1/transcriptions/${id}?format=${b.dataset.dl}`, `${base}.${b.dataset.dl}`));
+    el.querySelector('[data-audio]')?.addEventListener('click', () => download(`/v1/transcriptions/${id}/audio`, name));
+    el.querySelector('[data-retry]')?.addEventListener('click', () => retry(id));
+    el.querySelector('[data-del]')?.addEventListener('click', () => { if (confirm(`Delete "${name}" and its transcript?`)) remove(id); });
+    root.appendChild(el);
+  });
+}
+
+// Audio is fetched through the API once per job (auth header), then kept as an object URL.
+async function attachAudio(id, el) {
+  const job = jobs.get(id), player = el.querySelector('.jobAudio');
+  if (!job.audioUrl) {
+    if (!job.audioLoading) {
+      job.audioLoading = api(`/v1/transcriptions/${id}/audio`)
+        .then(blob => { job.audioUrl = URL.createObjectURL(blob); render(); })
+        .catch(e => toast(`Audio not available: ${e.message}`));
+    }
+    return;
+  }
+  player.src = job.audioUrl;
+  const lines = [...el.querySelectorAll('.segments li')];
+  lines.forEach(li => li.onclick = () => { player.currentTime = +li.dataset.start; player.play(); });
+  player.ontimeupdate = () => {
+    const t = player.currentTime;
+    lines.forEach(li => li.classList.toggle('active', t >= +li.dataset.start && t < +li.dataset.end));
+  };
+}
+
+// ---- helpers
+const stamp = (s) => { s = Math.max(0, s || 0); const m = Math.floor(s / 60); return `${String(m).padStart(2, '0')}:${(s % 60).toFixed(2).padStart(5, '0')}`; };
+const clock = (s) => { s = Math.max(0, s || 0); const m = Math.floor(s / 60), r = Math.floor(s % 60); return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`; };
+const human = (b) => b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+const esc = (t) => (t ?? '').toString().replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let LANG_NAMES = {};
+async function init() {
+  try {
+    const h = await (await fetch('/health')).json();
+    modelInfo = h.model;
+    $('#model').textContent = `${h.model.name} · ${h.model.device} ${h.model.compute_type} · ${h.workers} workers`;
+  } catch { $('#model').textContent = 'server unreachable'; }
+  try {
+    const l = await (await fetch('/v1/languages')).json();
+    LANG_NAMES = l.languages;
+    const sel = $('#lang');
+    Object.entries(l.languages).sort((a, b) => a[1].localeCompare(b[1])).forEach(([code, name]) => {
+      const o = document.createElement('option'); o.value = code; o.textContent = `${name} (${code})`; sel.appendChild(o);
+    });
+  } catch { toast('Could not load language list'); }
+}
+init();
+listMics().then(ok => { if (ok) openMic(micSel.value).catch(() => {}); });
+</script>
+</body>
+</html>
